@@ -1,48 +1,129 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Play, Pause, Volume2, VolumeX, Music } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Music, AlertCircle, X } from "lucide-react";
 import { BACKGROUND_MUSIC } from "@/lib/musicConfig";
 
 export function MusicPlayer() {
   const [isPlaying, setIsPlaying] = useState(false);
-  const [volume, setVolume] = useState(BACKGROUND_MUSIC.defaultVolume);
+  const [volume, setVolume] = useState(BACKGROUND_MUSIC.defaultVolume || 0.75);
   const [isMuted, setIsMuted] = useState(false);
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
   const [hasStartedOnce, setHasStartedOnce] = useState(false);
-  const [audioError, setAudioError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Audio source path: Next.js serves files in /public at the root URL
+  const audioSrc = BACKGROUND_MUSIC.src; // "/music/tareefan.mp3"
+
+  // Setup Event Listeners and Audio Lifecycle
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    console.log("Audio source:", audioSrc);
+
+    const onLoadedMetadata = () => {
+      console.log("Audio loaded: metadata loaded, duration:", audio.duration);
+      setErrorMessage(null);
+    };
+
+    const onCanPlay = () => {
+      console.log("Audio loaded: canplay ready");
+      setErrorMessage(null);
+    };
+
+    const onPlay = () => {
+      console.log("Playback started: audio is playing");
+      setIsPlaying(true);
+      setHasStartedOnce(true);
+      setErrorMessage(null);
+    };
+
+    const onPause = () => {
+      console.log("Audio paused");
+      setIsPlaying(false);
+    };
+
+    const onEnded = () => {
+      console.log("Audio ended");
+      setIsPlaying(false);
+    };
+
+    const onError = (e: Event) => {
+      const mediaError = audio.error;
+      console.error("Audio error:", mediaError || e);
+      setIsPlaying(false);
+      setErrorMessage("Couldn't load our song 🥺\nPlease check the audio file.");
+    };
+
+    audio.addEventListener("loadedmetadata", onLoadedMetadata);
+    audio.addEventListener("canplay", onCanPlay);
+    audio.addEventListener("play", onPlay);
+    audio.addEventListener("pause", onPause);
+    audio.addEventListener("ended", onEnded);
+    audio.addEventListener("error", onError);
+
+    // Initial properties
+    audio.volume = isMuted ? 0 : volume;
+    audio.muted = isMuted;
+
+    return () => {
+      audio.removeEventListener("loadedmetadata", onLoadedMetadata);
+      audio.removeEventListener("canplay", onCanPlay);
+      audio.removeEventListener("play", onPlay);
+      audio.removeEventListener("pause", onPause);
+      audio.removeEventListener("ended", onEnded);
+      audio.removeEventListener("error", onError);
+    };
+  }, [audioSrc, volume, isMuted]);
 
   // Sync volume with audio element
   useEffect(() => {
     if (audioRef.current) {
       audioRef.current.volume = isMuted ? 0 : volume;
+      audioRef.current.muted = isMuted;
     }
   }, [volume, isMuted]);
 
-  const togglePlay = async () => {
+  // Toggle Play / Pause on user click
+  const handleTogglePlay = useCallback(async () => {
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio) {
+      console.error("Playback failed: Audio element reference is null");
+      return;
+    }
 
     if (isPlaying) {
+      console.log("User paused playback");
       audio.pause();
       setIsPlaying(false);
     } else {
+      console.log("User initiated playback: calling audio.play() on", audioSrc);
+      setErrorMessage(null);
+
+      // Ensure audio properties are ready
+      audio.volume = isMuted ? 0 : volume;
+      audio.muted = isMuted;
+
       try {
-        setAudioError(false);
-        audio.volume = isMuted ? 0 : volume;
-        await audio.play();
-        setIsPlaying(true);
-        setHasStartedOnce(true);
+        const playPromise = audio.play();
+        if (playPromise !== undefined) {
+          await playPromise;
+          console.log("Playback started: Promise resolved successfully");
+          setIsPlaying(true);
+          setHasStartedOnce(true);
+          setErrorMessage(null);
+        }
       } catch (err: any) {
-        console.warn("Could not play audio (check if /public/music/tareefan.mp3 exists):", err?.message);
-        setAudioError(true);
+        console.error("Playback failed:", err);
         setIsPlaying(false);
+        setErrorMessage("Couldn't load our song 🥺\nPlease check the audio file.");
       }
     }
-  };
+  }, [isPlaying, isMuted, volume, audioSrc]);
 
   const toggleMute = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -57,10 +138,52 @@ export function MusicPlayer() {
 
   return (
     <div
-      className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-40 select-none"
+      className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-40 select-none flex flex-col items-end gap-2"
       onMouseEnter={() => setShowVolumeSlider(true)}
       onMouseLeave={() => setShowVolumeSlider(false)}
     >
+      {/* HTML5 Audio Element */}
+      <audio
+        ref={audioRef}
+        src={audioSrc}
+        loop
+        preload="auto"
+      />
+
+      {/* Floating Error Notification if file is missing or failed to play */}
+      <AnimatePresence>
+        {errorMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: 10, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 10, scale: 0.9 }}
+            className="relative max-w-xs p-3 rounded-2xl glass-luxury border border-rose-400/40 bg-black/90 backdrop-blur-xl shadow-2xl text-left text-xs space-y-1.5"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-1.5 text-rose-300 font-medium">
+                <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0" />
+                <span>Audio Notice</span>
+              </div>
+              <button
+                onClick={() => setErrorMessage(null)}
+                className="text-slate-400 hover:text-white p-0.5 rounded cursor-pointer"
+                aria-label="Dismiss message"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <p className="text-slate-200 font-sans leading-relaxed whitespace-pre-line">
+              {errorMessage}
+            </p>
+            <div className="pt-1 text-[11px] font-mono text-amber-200/90 bg-white/5 p-2 rounded-lg border border-white/10">
+              📁 Place <span className="text-rose-300 font-bold">tareefan.mp3</span> inside:
+              <br />
+              <span className="text-slate-300">public/music/tareefan.mp3</span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="relative flex items-center gap-2">
         {/* Desktop Volume Slider Slider Expand */}
         <AnimatePresence>
@@ -100,7 +223,7 @@ export function MusicPlayer() {
         {/* Main Music Pill Button */}
         <motion.button
           id="music-player-toggle"
-          onClick={togglePlay}
+          onClick={handleTogglePlay}
           whileTap={{ scale: 0.95 }}
           className={`relative group flex items-center gap-2.5 px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-full transition-all duration-500 cursor-pointer ${
             isPlaying
@@ -163,27 +286,6 @@ export function MusicPlayer() {
           </div>
         </motion.button>
       </div>
-
-      {/* Declarative Audio Element */}
-      <audio
-        ref={audioRef}
-        src={BACKGROUND_MUSIC.src}
-        loop
-        preload="auto"
-        onPlay={() => setIsPlaying(true)}
-        onPause={() => setIsPlaying(false)}
-        onError={() => {
-          setAudioError(true);
-          setIsPlaying(false);
-        }}
-      />
-
-      {/* Optional gentle hint if audio file is missing on local drive */}
-      {audioError && !isPlaying && (
-        <p className="absolute right-0 top-full mt-1.5 text-[10px] font-sans text-rose-300/70 whitespace-nowrap bg-black/80 px-2 py-0.5 rounded border border-rose-400/20">
-          Place tareefan.mp3 in public/music/
-        </p>
-      )}
     </div>
   );
 }
