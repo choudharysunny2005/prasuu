@@ -15,6 +15,7 @@ import { EmotionalDeepSection } from "@/components/story/EmotionalDeepSection";
 import { HeartCatchGame } from "@/components/game/HeartCatchGame";
 import { FinalSceneScreen } from "@/components/ui/FinalSceneScreen";
 import { CinematicLightBurst } from "@/components/ui/CinematicLightBurst";
+import { MusicPlayer } from "@/components/ui/MusicPlayer";
 import {
   playWarpSound,
   playEnvelopeOpenSound,
@@ -243,6 +244,9 @@ export default function Home() {
       {phase === "final" && (
         <FinalSceneScreen onRestart={() => setPhase("landing")} />
       )}
+
+      {/* Background Music Controller (Fixed Bottom-Right) */}
+      <MusicPlayer />
     </main>
   );
 }
