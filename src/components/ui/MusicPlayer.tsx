@@ -14,90 +14,33 @@ export function MusicPlayer() {
   const [audioError, setAudioError] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const fadeIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Initialize audio element
-  useEffect(() => {
-    const audio = new Audio(BACKGROUND_MUSIC.src);
-    audio.loop = true;
-    audio.volume = volume;
-    audio.preload = "auto";
-    audioRef.current = audio;
-
-    const handlePlay = () => setIsPlaying(true);
-    const handlePause = () => setIsPlaying(false);
-    const handleError = () => {
-      // Graceful error handling if file is not yet copied into /public/music/
-      setAudioError(true);
-      setIsPlaying(false);
-    };
-
-    audio.addEventListener("play", handlePlay);
-    audio.addEventListener("pause", handlePause);
-    audio.addEventListener("error", handleError);
-
-    return () => {
-      if (fadeIntervalRef.current) clearInterval(fadeIntervalRef.current);
-      audio.pause();
-      audio.removeEventListener("play", handlePlay);
-      audio.removeEventListener("pause", handlePause);
-      audio.removeEventListener("error", handleError);
-      audioRef.current = null;
-    };
-  }, []);
-
-  // Update volume when state changes
+  // Sync volume with audio element
   useEffect(() => {
     if (audioRef.current) {
       audioRef.current.volume = isMuted ? 0 : volume;
     }
   }, [volume, isMuted]);
 
-  // Smooth Fade-In Playback
-  const playWithSmoothFade = () => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    setAudioError(false);
-    audio.volume = 0;
-    const targetVolume = isMuted ? 0 : volume;
-
-    const playPromise = audio.play();
-    if (playPromise !== undefined) {
-      playPromise
-        .then(() => {
-          setIsPlaying(true);
-          setHasStartedOnce(true);
-
-          // Smooth fade in over 500ms
-          if (fadeIntervalRef.current) clearInterval(fadeIntervalRef.current);
-          let currentVol = 0;
-          const step = targetVolume / 10;
-          fadeIntervalRef.current = setInterval(() => {
-            currentVol = Math.min(currentVol + step, targetVolume);
-            if (audioRef.current) audioRef.current.volume = currentVol;
-            if (currentVol >= targetVolume) {
-              if (fadeIntervalRef.current) clearInterval(fadeIntervalRef.current);
-            }
-          }, 50);
-        })
-        .catch((err) => {
-          console.warn("Audio playback waiting for user action or file:", err.message);
-          setIsPlaying(false);
-        });
-    }
-  };
-
-  const togglePlay = () => {
+  const togglePlay = async () => {
     const audio = audioRef.current;
     if (!audio) return;
 
     if (isPlaying) {
-      if (fadeIntervalRef.current) clearInterval(fadeIntervalRef.current);
       audio.pause();
       setIsPlaying(false);
     } else {
-      playWithSmoothFade();
+      try {
+        setAudioError(false);
+        audio.volume = isMuted ? 0 : volume;
+        await audio.play();
+        setIsPlaying(true);
+        setHasStartedOnce(true);
+      } catch (err: any) {
+        console.warn("Could not play audio (check if /public/music/tareefan.mp3 exists):", err?.message);
+        setAudioError(true);
+        setIsPlaying(false);
+      }
     }
   };
 
@@ -221,9 +164,23 @@ export function MusicPlayer() {
         </motion.button>
       </div>
 
+      {/* Declarative Audio Element */}
+      <audio
+        ref={audioRef}
+        src={BACKGROUND_MUSIC.src}
+        loop
+        preload="auto"
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
+        onError={() => {
+          setAudioError(true);
+          setIsPlaying(false);
+        }}
+      />
+
       {/* Optional gentle hint if audio file is missing on local drive */}
       {audioError && !isPlaying && (
-        <p className="absolute right-0 top-full mt-1.5 text-[10px] font-sans text-rose-300/70 whitespace-nowrap">
+        <p className="absolute right-0 top-full mt-1.5 text-[10px] font-sans text-rose-300/70 whitespace-nowrap bg-black/80 px-2 py-0.5 rounded border border-rose-400/20">
           Place tareefan.mp3 in public/music/
         </p>
       )}
