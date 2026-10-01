@@ -101,14 +101,28 @@ export function MusicPlayer() {
       audio.pause();
       setIsPlaying(false);
     } else {
-      console.log("User initiated playback: calling audio.play() on", audioSrc);
+      console.log("User initiated playback: checking", audioSrc);
       setErrorMessage(null);
+
+      // Pre-flight check: verify if the file actually exists on the server first
+      try {
+        const response = await fetch(audioSrc, { method: "HEAD" });
+        if (!response.ok) {
+          console.warn(`[MusicPlayer] File not found at ${audioSrc} (Status: ${response.status}). Please copy tareefan.mp3 to public/music/tareefan.mp3`);
+          setErrorMessage("Couldn't load our song 🥺\nPlease check the audio file.");
+          setIsPlaying(false);
+          return;
+        }
+      } catch (e) {
+        console.warn("[MusicPlayer] Pre-flight fetch check failed:", e);
+      }
 
       // Ensure audio properties are ready
       audio.volume = isMuted ? 0 : volume;
       audio.muted = isMuted;
 
       try {
+        audio.load();
         const playPromise = audio.play();
         if (playPromise !== undefined) {
           await playPromise;
@@ -118,7 +132,7 @@ export function MusicPlayer() {
           setErrorMessage(null);
         }
       } catch (err: any) {
-        console.error("Playback failed:", err);
+        console.error("Playback failed:", err?.message || err);
         setIsPlaying(false);
         setErrorMessage("Couldn't load our song 🥺\nPlease check the audio file.");
       }
@@ -145,10 +159,12 @@ export function MusicPlayer() {
       {/* HTML5 Audio Element */}
       <audio
         ref={audioRef}
-        src={audioSrc}
         loop
         preload="auto"
-      />
+      >
+        <source src={audioSrc} type="audio/mpeg" />
+        <source src={audioSrc} type="audio/mp3" />
+      </audio>
 
       {/* Floating Error Notification if file is missing or failed to play */}
       <AnimatePresence>
